@@ -1,0 +1,23 @@
+<html>
+<head></head>
+
+<body>
+  <script>
+    'use strict';
+    document.body.onload = function() {
+
+        function socketExample() {
+            let socket = new WebSocket('ws://localhost/');
+            socket.onopen = function() {
+                socket.send('What is the meaning of life, the universe and everything?');
+            };
+            socket.onmessage = function(message) {
+                console.log('Socket server message', message);
+            };
+        }
+
+        socketExample();
+    }
+  </script>
+</body>
+</html>
