@@ -3,16 +3,35 @@
 
 <head>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.15.1/dist/phaser-arcade-physics.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/node-uuid@1.4.8/uuid.min.js"></script>
 </head>
 
 <body>
 
     <script>
+            const socketUrl = `ws://${window.location.host}/games/space-hunter`;;
+            const filesUrl = `${window.location.protocol}//${window.location.host}/public/games/space-hunter`;
+            const uuidv4 = window.uuid.v4;
+            var ws = new WebSocket(socketUrl);
+            const clientId = uuidv4();
+            ws.onopen = function() {                  
+                  ws.send(JSON.stringify( {
+                      clientId: clientId
+                  }));
+            };
+
+            ws.onmessage = function(message) {    
+                let data = JSON.parse(message.data);
+                update(data);
+            };
+        
+        const gameWidth = 1280;
+        const gameHeight = 720;
         var config = {
             type: Phaser.AUTO,
             parent: 'phaser-example',
-            width: 1280,
-            height: 720,
+            width: gameWidth,
+            height: gameHeight,
             physics: {
                 default: 'arcade',
                 arcade: {
@@ -23,7 +42,6 @@
             scene: {
                 preload: preload,
                 create: create,
-                update: update,
                 extend: {
                     player: null,
                     healthpoints: null,
@@ -49,7 +67,6 @@
                     this.xSpeed = 0;
                     this.ySpeed = 0;
                     this.setSize(12, 12, true);
-                    console.log(this.setAccelerationX);
                 },
 
             fire: function (shooter, target) {
@@ -162,23 +179,24 @@
                 }
             },
 
-            update: function (time, delta) {
-                this.move(player);
-                this.fire(player, time, this.scene);
-                this.constrainVelocity();
-                this.rotation = Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y);
+            update: function (message) {
+                //console.log(message);
+                //this.move(player);
+               // this.fire(player, time, this.scene);
+               // this.constrainVelocity();
+               // this.rotation = Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y);
             }
 
         });
 
         function preload() {
-            this.load.spritesheet('player_handgun', 'public/games/space-hunter/ship-small.png',
+            this.load.spritesheet('player_handgun', `${filesUrl}/images/ship-small.png`,
                 { frameWidth: 70, frameHeight: 58 }
             );
-            this.load.image('bullet', 'public/games/space-hunter/blue-plasma.png');
-            this.load.image('target', 'public/games/space-hunter/reticle.png');
-            this.load.image('background', 'public/games/space-hunter/stars.jpg');
-            this.load.image('ship', 'public/games/space-hunter/ship.png');
+            this.load.image('bullet', `${filesUrl}/images/blue-plasma.png`);
+            this.load.image('target', `${filesUrl}/images/reticle.png`);
+            this.load.image('background', `${filesUrl}/images/stars.jpg`);
+            this.load.image('ship', `${filesUrl}/images/ship.png`);
         }
 
         function create() {
@@ -186,7 +204,6 @@
 
             let background = this.add.image(5000, 5000, 'background');
             player = this.physics.add.sprite(5000, 5000, 'player_handgun');
-            console.log(player.setAccelerationX);
             reticle = this.physics.add.sprite(5100, 5000, 'target');
             playerBullets = this.physics.add.group({ classType: Bullet, runChildUpdate: true });
             enemies = this.physics.add.group({ classType: Enemy, runChildUpdate: true });
@@ -204,21 +221,21 @@
             this.cameras.main.startFollow(player);
 
             this.input.on('pointerdown', function (pointer, time, lastFired) {
-                if (player.active === false)
-                    return;
+                if (player.active === false){ return; }
 
                 if (pointer.leftButtonDown()) {
                     var bullet = playerBullets.get().setActive(true).setVisible(true);
                     if (bullet) {
                         bullet.fire(player, reticle);
-                        console.log(enemies);
+                        for (let enemy of enemies.children.entries) {
+                            this.physics.add.collider(enemy, bullet, enemyHitCallback);
+                        }
                     }
                 }
-
             }, this);
 
             game.canvas.addEventListener('mousedown', function () {
-                game.input.mouse.requestPointerLock();
+                //game.input.mouse.requestPointerLock();
             });
 
             this.input.keyboard.on('keydown_Q', function (event) {
@@ -227,19 +244,21 @@
             }, 0, this);
 
             this.input.on('pointermove', function (pointer) {
-                if (this.input.mouse.locked) {
-                    reticle.x += pointer.movementX;
-                    reticle.y += pointer.movementY;
-                }
-            }, this);
+                //if (this.input.mouse.locked) {
+                    //console.log(pointer.wasTouch);
+                    //console.log(pointer.x, reticle.x);
+                    let x = pointer.x - (gameWidth / 2);
+                    let y = pointer.y - (gameHeight / 2);
 
-            enemies.get(4500, 5000).setActive(true).setVisible(true);
+                    reticle.x += x;
+                    reticle.y += y;
+                //}
+            }, this);
         }
 
         function enemyHitCallback(enemyHit, bulletHit) {
             if (bulletHit.active === true && enemyHit.active === true) {
                 enemyHit.health = enemyHit.health - 1;
-                console.log("Enemy hp: ", enemyHit.health);
 
                 if (enemyHit.health <= 0) {
                     enemyHit.setActive(false).setVisible(false);
@@ -252,82 +271,50 @@
         function playerHitCallback(playerHit, bulletHit) {
             if (bulletHit.active === true && playerHit.active === true) {
                 playerHit.health = playerHit.health - 1;
-                console.log("Player hp: ", playerHit.health);
 
                 bulletHit.setActive(false).setVisible(false);
             }
         }
 
-        function constrainVelocity(sprite, maxVelocity) {
-            if (!sprite || !sprite.body)
-                return;
+        function update(data) {
+            if (player === undefined) { return; }
+            player.x = data.players[clientId].x;
+            player.y = data.players[clientId].y;
 
-            var angle, currVelocitySqr, vx, vy;
-            vx = sprite.body.velocity.x;
-            vy = sprite.body.velocity.y;
-            currVelocitySqr = vx * vx + vy * vy;
-
-            if (currVelocitySqr > maxVelocity * maxVelocity) {
-                angle = Math.atan2(vy, vx);
-                vx = Math.cos(angle) * maxVelocity;
-                vy = Math.sin(angle) * maxVelocity;
-                sprite.body.velocity.x = vx;
-                sprite.body.velocity.y = vy;
-            }
-        }
-
-        function movePlayer(player, reticle) {
-            let xSpeed = 100;
-            let ySpeed = 100;
-            let direction = Math.atan((reticle.x - player.x) / (reticle.y - player.y)) || 0;
-
-            if (reticle.y >= player.y) {
-                player.xSpeed += xSpeed * Math.sin(direction);
-                player.ySpeed += ySpeed * Math.cos(direction);
-            }
-            else {
-                player.xSpeed += -xSpeed * Math.sin(direction);
-                player.ySpeed += -ySpeed * Math.cos(direction);
-            }
-
-
-            if (player.xSpeed > 1000) {
-                player.xSpeed = 1000
-            } else if (player.xSpeed < -1000) {
-                player.xSpeed = -1000
-            }
-            if (player.ySpeed > 1000) {
-                player.ySpeed = 1000
-            } else if (player.ySpeed < -1000) {
-                player.ySpeed = -1000
-            }
-            player.setAccelerationX(player.xSpeed);
-            player.setAccelerationY(player.ySpeed);
-        }
-
-        function constrainReticle(reticle) {
-            var distX = reticle.x - player.x; // X distance between player & reticle
-            var distY = reticle.y - player.y; // Y distance between player & reticle
-
-            // Ensures reticle cannot be moved offscreen (player follow)
-            if (distX > 250)
-                reticle.x = player.x + 250;
-            else if (distX < -250)
-                reticle.x = player.x - 250;
-
-            if (distY > 250)
-                reticle.y = player.y + 250;
-            else if (distY < -250)
-                reticle.y = player.y - 250;
-        }
-
-        function update(time, delta) {
             player.rotation = Phaser.Math.Angle.Between(player.x, player.y, reticle.x, reticle.y);
-            reticle.body.velocity.x = player.body.velocity.x;
-            reticle.body.velocity.y = player.body.velocity.y;
-            movePlayer(player, reticle);
-            constrainVelocity(player, 500);
-            constrainReticle(reticle);
+            reticle.x = player.x + 350 * Math.cos(player.rotation);
+            reticle.y = player.y + 350 * Math.sin(player.rotation);
+            reticle.x += data.players[clientId].xSpeed;
+		    reticle.y += data.players[clientId].ySpeed;
+
+            for (let playerId in data.players) {
+                if (playerId === clientId) {continue;}
+                const otherPlayer = data.players[playerId];
+
+                let enemy = null;
+                for (const listEnemy of enemies.children.entries) {
+                    if (playerId === listEnemy.playerId) {
+                        enemy = listEnemy;
+                        break;
+                    }
+                }
+
+                if (!enemy) {
+                    //TODO: Create enemy
+                    enemy = enemies.get(otherPlayer.x, otherPlayer.y).setActive(true).setVisible(true);
+                    enemy.playerId = playerId;
+                } else {
+                    //TODO: Move enemy
+                    enemy.x = otherPlayer.x;
+                    enemy.y = otherPlayer.y;
+                }
+            }
+
+            ws.send(JSON.stringify({
+                clientId: clientId,
+                rotation: player.rotation,
+                fire: false
+            }));
         }
     </script>
 
