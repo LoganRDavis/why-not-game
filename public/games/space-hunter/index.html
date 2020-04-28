@@ -9,25 +9,26 @@
 <body>
 
     <script>
-            const socketUrl = `ws://${window.location.host}/games/space-hunter`;;
-            const filesUrl = `${window.location.protocol}//${window.location.host}/public/games/space-hunter`;
-            const uuidv4 = window.uuid.v4;
-            var ws = new WebSocket(socketUrl);
-            const clientId = uuidv4();
-            ws.onopen = function() {                  
-                  ws.send(JSON.stringify( {
-                      clientId: clientId
-                  }));
-            };
+        const socketUrl = `ws://${window.location.host}/games/space-hunter`;;
+        const filesUrl = `${window.location.protocol}//${window.location.host}/public/games/space-hunter`;
+        const uuidv4 = window.uuid.v4;
+        var ws = new WebSocket(socketUrl);
+        const clientId = uuidv4();
+        ws.onopen = function() {                  
+            ws.send(JSON.stringify( {
+                clientId: clientId
+            }));
+        };
 
-            ws.onmessage = function(message) {    
-                let data = JSON.parse(message.data);
-                update(data);
-            };
+        ws.onmessage = function(message) {    
+            let data = JSON.parse(message.data);
+            update(data);
+        };
         
         const gameWidth = 1280;
         const gameHeight = 720;
-        var config = {
+
+        var game = new Phaser.Game({
             type: Phaser.AUTO,
             parent: 'phaser-example',
             width: gameWidth,
@@ -52,9 +53,7 @@
                     time: 0,
                 }
             }
-        };
-
-        var game = new Phaser.Game(config);
+        });
 
         var Bullet = new Phaser.Class({
             Extends: Phaser.GameObjects.Image,
@@ -68,34 +67,6 @@
                     this.ySpeed = 0;
                     this.setSize(12, 12, true);
                 },
-
-            fire: function (shooter, target) {
-                this.setPosition(shooter.x, shooter.y);
-                this.direction = Math.atan((target.x - this.x) / (target.y - this.y));
-
-                if (target.y >= this.y) {
-                    this.xSpeed = this.speed * Math.sin(this.direction);
-                    this.ySpeed = this.speed * Math.cos(this.direction);
-                }
-                else {
-                    this.xSpeed = -this.speed * Math.sin(this.direction);
-                    this.ySpeed = -this.speed * Math.cos(this.direction);
-                }
-
-                this.rotation = shooter.rotation;
-                this.born = 0;
-            },
-
-            update: function (time, delta) {
-                this.x += this.xSpeed * delta;
-                this.y += this.ySpeed * delta;
-                this.born += delta;
-                if (this.born > 5000) {
-                    this.setActive(false);
-                    this.setVisible(false);
-                }
-            }
-
         });
 
         var Enemy = new Phaser.Class({
@@ -178,15 +149,6 @@
                     this.body.velocity.y = vy;
                 }
             },
-
-            update: function (message) {
-                //console.log(message);
-                //this.move(player);
-               // this.fire(player, time, this.scene);
-               // this.constrainVelocity();
-               // this.rotation = Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y);
-            }
-
         });
 
         function preload() {
@@ -195,23 +157,24 @@
             );
             this.load.image('bullet', `${filesUrl}/images/blue-plasma.png`);
             this.load.image('target', `${filesUrl}/images/reticle.png`);
+            this.load.image('plasmaBackground', `${filesUrl}/images/plasma-background.png`);
             this.load.image('background', `${filesUrl}/images/stars.jpg`);
             this.load.image('ship', `${filesUrl}/images/ship.png`);
         }
 
         function create() {
             this.physics.world.setBounds(0, 0, 10000, 10000);
-
-            let background = this.add.image(5000, 5000, 'background');
-            player = this.physics.add.sprite(5000, 5000, 'player_handgun');
-            reticle = this.physics.add.sprite(5100, 5000, 'target');
-            playerBullets = this.physics.add.group({ classType: Bullet, runChildUpdate: true });
+            let plasmaBackground = this.add.image(6000, 6000, 'plasmaBackground')
+                .setOrigin(0.5, 0.5).setDisplaySize(90000, 90000);
+            let background = this.add.image(5000, 5000, 'background')
+                .setOrigin(0.5, 0.5).setDisplaySize(10000, 10000);
+            player = this.physics.add.sprite(2500, 2500, 'player_handgun');
+            reticle = this.physics.add.sprite(2600, 2500, 'target');
             enemies = this.physics.add.group({ classType: Enemy, runChildUpdate: true });
-            enemyBullets = this.physics.add.group({ classType: Bullet, runChildUpdate: true });
+            bullets = this.physics.add.group({ classType: Bullet, runChildUpdate: true });
 
-            background.setOrigin(0.5, 0.5).setDisplaySize(10000, 10000);
-            player.setOrigin(0.5, 0.5).setDisplaySize(132, 120).setCollideWorldBounds(true).setDrag(500, 500);
-            reticle.setOrigin(0.5, 0.5).setDisplaySize(50, 50).setCollideWorldBounds(true);
+            player.setOrigin(0.5, 0.5).setDisplaySize(132, 120).setCollideWorldBounds(false).setDrag(500, 500);
+            reticle.setOrigin(0.5, 0.5).setDisplaySize(50, 50).setCollideWorldBounds(false);
 
             player.health = 3;
             player.xSpeed = 0;
@@ -219,23 +182,15 @@
 
             this.cameras.main.zoom = 0.5;
             this.cameras.main.startFollow(player);
+            game.input.addPointer();
 
             this.input.on('pointerdown', function (pointer, time, lastFired) {
-                if (player.active === false){ return; }
-
-                if (pointer.leftButtonDown()) {
-                    var bullet = playerBullets.get().setActive(true).setVisible(true);
-                    if (bullet) {
-                        bullet.fire(player, reticle);
-                        for (let enemy of enemies.children.entries) {
-                            this.physics.add.collider(enemy, bullet, enemyHitCallback);
-                        }
-                    }
-                }
+                if (player.active === false) { return; }
+                player.fire = true;
             }, this);
 
             game.canvas.addEventListener('mousedown', function () {
-                //game.input.mouse.requestPointerLock();
+                game.input.mouse.requestPointerLock();
             });
 
             this.input.keyboard.on('keydown_Q', function (event) {
@@ -244,36 +199,16 @@
             }, 0, this);
 
             this.input.on('pointermove', function (pointer) {
-                //if (this.input.mouse.locked) {
-                    //console.log(pointer.wasTouch);
-                    //console.log(pointer.x, reticle.x);
-                    let x = pointer.x - (gameWidth / 2);
-                    let y = pointer.y - (gameHeight / 2);
-
-                    reticle.x += x;
-                    reticle.y += y;
-                //}
-            }, this);
-        }
-
-        function enemyHitCallback(enemyHit, bulletHit) {
-            if (bulletHit.active === true && enemyHit.active === true) {
-                enemyHit.health = enemyHit.health - 1;
-
-                if (enemyHit.health <= 0) {
-                    enemyHit.setActive(false).setVisible(false);
+                if (this.input.mouse.locked) {
+                    reticle.x += pointer.movementX;
+                    reticle.y += pointer.movementY;
+                } else {
+                    if (pointer.id <= 1) {
+                        reticle.x += pointer.x - (gameWidth / 2);
+                        reticle.y += pointer.y - (gameHeight / 2);
+                    }
                 }
-
-                bulletHit.setActive(false).setVisible(false);
-            }
-        }
-
-        function playerHitCallback(playerHit, bulletHit) {
-            if (bulletHit.active === true && playerHit.active === true) {
-                playerHit.health = playerHit.health - 1;
-
-                bulletHit.setActive(false).setVisible(false);
-            }
+            }, this);
         }
 
         function update(data) {
@@ -300,21 +235,49 @@
                 }
 
                 if (!enemy) {
-                    //TODO: Create enemy
                     enemy = enemies.get(otherPlayer.x, otherPlayer.y).setActive(true).setVisible(true);
                     enemy.playerId = playerId;
                 } else {
-                    //TODO: Move enemy
+                    if (otherPlayer.health <= 0) {
+                        enemy.setActive(false).setVisible(false);
+                    }
                     enemy.x = otherPlayer.x;
                     enemy.y = otherPlayer.y;
+                    enemy.rotation = otherPlayer.rotation;
+                }
+            }
+
+            for (let dataBulletId in data.bullets) {
+                let dataBullet = data.bullets[dataBulletId];
+                let bullet = null;
+                for (const listBullet of bullets.children.entries) {
+                    if (dataBullet.id === listBullet.id) {
+                        bullet = listBullet;
+                        break;
+                    }
+                }
+
+                if (!bullet) {
+                    bullet = bullets.get().setActive(true).setVisible(true);
+                    bullet.id = dataBullet.id;
+                } 
+                bullet.x = dataBullet.x;
+                bullet.y = dataBullet.y;
+                bullet.rotation = dataBullet.rotation;
+            }
+
+            for (const listBullet of bullets.children.entries) {
+                if (!(listBullet.id in data.bullets)) {
+                    listBullet.setActive(false).setVisible(false);
                 }
             }
 
             ws.send(JSON.stringify({
                 clientId: clientId,
                 rotation: player.rotation,
-                fire: false
+                fire: player.fire
             }));
+            player.fire = false;
         }
     </script>
 
