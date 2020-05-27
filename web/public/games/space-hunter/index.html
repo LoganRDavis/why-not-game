@@ -9,7 +9,7 @@
 <body>
 
     <script>
-        const socketUrl = `ws://${window.location.host}/games/space-hunter`;;
+        const socketUrl = `wss://${window.location.host}/games/space-hunter`;;
         const filesUrl = `${window.location.protocol}//${window.location.host}/public/games/space-hunter`;
         const uuidv4 = window.uuid.v4;
         var ws = new WebSocket(socketUrl);
