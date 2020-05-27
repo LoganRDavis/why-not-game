@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.15.1/dist/phaser-arcade-physics.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/node-uuid@1.4.8/uuid.min.js"></script>
+</head>
+
+<body>
+
+    <script>
+        const socketUrl = `ws://${window.location.host}/games/space-hunter`;;
+        const filesUrl = `${window.location.protocol}//${window.location.host}/public/games/space-hunter`;
+        const uuidv4 = window.uuid.v4;
+        var ws = new WebSocket(socketUrl);
+        const clientId = uuidv4();
+        ws.onopen = function() {                  
+            ws.send(JSON.stringify( {
+                clientId: clientId
+            }));
+        };
+
+        ws.onmessage = function(message) {    
+            let data = JSON.parse(message.data);
+            update(data);
+        };
+        
+        const gameWidth = 1280;
+        const gameHeight = 720;
+
+        var game = new Phaser.Game({
+            type: Phaser.AUTO,
+            parent: 'phaser-example',
+            width: gameWidth,
+            height: gameHeight,
+            physics: {
+                default: 'arcade',
+                arcade: {
+                    gravity: { y: 0 },
+                    debug: false
+                }
+            },
+            scene: {
+                preload: preload,
+                create: create,
+                extend: {
+                    player: null,
+                    healthpoints: null,
+                    reticle: null,
+                    enemies: null,
+                    playerBullets: null,
+                    enemyBullets: null,
+                    time: 0,
+                }
+            }
+        });
+
+        var Bullet = new Phaser.Class({
+            Extends: Phaser.GameObjects.Image,
+            initialize:
+                function Bullet(scene) {
+                    Phaser.GameObjects.Image.call(this, scene, 50, 50, 'bullet');
+                    this.speed = 1;
+                    this.born = 0;
+                    this.direction = 0;
+                    this.xSpeed = 0;
+                    this.ySpeed = 0;
+                    this.setSize(12, 12, true);
+                },
+        });
+
+        var Enemy = new Phaser.Class({
+            Extends: Phaser.Physics.Arcade.Sprite,
+            initialize:
+                function Enemy(scene, xPos, yPos) {
+                    Phaser.GameObjects.Sprite.call(this, scene, xPos, yPos, 'player_handgun');
+                    this.active = true;
+                    this.health = 3;
+                    this.lastFired = 0;
+                    this.maxVelocity = 500;
+                    this.xSpeed = 0;
+                    this.ySpeed = 0;
+                    this.setOrigin(0.5, 0.5);
+                    this.setDisplaySize(132, 120);
+                    //this.setCollideWorldBounds(true);
+                },
+
+            fire: function (player, time, gameObject) {
+                if (this.active === false) {
+                    return;
+                }
+
+                if ((time - this.lastFired) > 1000) {
+                    this.lastFired = time;
+
+                    var bullet = enemyBullets.get().setActive(true).setVisible(true);
+
+                    if (bullet) {
+                        bullet.fire(this, player);
+                        gameObject.physics.add.collider(player, bullet, playerHitCallback);
+                    }
+                }
+            },
+
+            move: function (player) {
+                let xSpeed = 100;
+                let ySpeed = 100;
+                let direction = Math.atan((player.x - this.x) / (player.y - this.y)) || 0;
+
+                if (player.y >= this.y) {
+                    this.xSpeed += xSpeed * Math.sin(direction);
+                    this.ySpeed += ySpeed * Math.cos(direction);
+                }
+                else {
+                    this.xSpeed += -xSpeed * Math.sin(direction);
+                    this.ySpeed += -ySpeed * Math.cos(direction);
+                }
+
+
+                if (this.xSpeed > 1000) {
+                    this.xSpeed = 1000
+                } else if (player.xSpeed < -1000) {
+                    this.xSpeed = -1000
+                }
+                if (this.ySpeed > 1000) {
+                    this.ySpeed = 1000
+                } else if (this.ySpeed < -1000) {
+                    this.ySpeed = -1000
+                }
+
+                this.setAccelerationX(this.xSpeed);
+                this.setAccelerationY(this.ySpeed);
+            },
+
+            constrainVelocity: function () {
+                if (!this || !this.body)
+                    return;
+
+                var angle, currVelocitySqr, vx, vy;
+                vx = this.body.velocity.x;
+                vy = this.body.velocity.y;
+                currVelocitySqr = vx * vx + vy * vy;
+
+                if (currVelocitySqr > this.maxVelocity * this.maxVelocity) {
+                    angle = Math.atan2(vy, vx);
+                    vx = Math.cos(angle) * this.maxVelocity;
+                    vy = Math.sin(angle) * this.maxVelocity;
+                    this.body.velocity.x = vx;
+                    this.body.velocity.y = vy;
+                }
+            },
+        });
+
+        function preload() {
+            this.load.spritesheet('player_handgun', `${filesUrl}/images/ship-small.png`,
+                { frameWidth: 70, frameHeight: 58 }
+            );
+            this.load.image('bullet', `${filesUrl}/images/blue-plasma.png`);
+            this.load.image('target', `${filesUrl}/images/reticle.png`);
+            this.load.image('plasmaBackground', `${filesUrl}/images/plasma-background.png`);
+            this.load.image('background', `${filesUrl}/images/stars.jpg`);
+            this.load.image('ship', `${filesUrl}/images/ship.png`);
+        }
+
+        function create() {
+            this.physics.world.setBounds(0, 0, 10000, 10000);
+            let plasmaBackground = this.add.image(6000, 6000, 'plasmaBackground')
+                .setOrigin(0.5, 0.5).setDisplaySize(90000, 90000);
+            let background = this.add.image(5000, 5000, 'background')
+                .setOrigin(0.5, 0.5).setDisplaySize(10000, 10000);
+            player = this.physics.add.sprite(2500, 2500, 'player_handgun');
+            reticle = this.physics.add.sprite(2600, 2500, 'target');
+            enemies = this.physics.add.group({ classType: Enemy, runChildUpdate: true });
+            bullets = this.physics.add.group({ classType: Bullet, runChildUpdate: true });
+
+            player.setOrigin(0.5, 0.5).setDisplaySize(132, 120).setCollideWorldBounds(false).setDrag(500, 500);
+            reticle.setOrigin(0.5, 0.5).setDisplaySize(50, 50).setCollideWorldBounds(false);
+
+            player.health = 3;
+            player.xSpeed = 0;
+            player.ySpeed = 0;
+
+            this.cameras.main.zoom = 0.5;
+            this.cameras.main.startFollow(player);
+            game.input.addPointer();
+
+            this.input.on('pointerdown', function (pointer, time, lastFired) {
+                if (player.active === false) { return; }
+                player.fire = true;
+            }, this);
+
+            game.canvas.addEventListener('mousedown', function () {
+                game.input.mouse.requestPointerLock();
+            });
+
+            this.input.keyboard.on('keydown_Q', function (event) {
+                if (game.input.mouse.locked)
+                    game.input.mouse.releasePointerLock();
+            }, 0, this);
+
+            this.input.on('pointermove', function (pointer) {
+                if (this.input.mouse.locked) {
+                    reticle.x += pointer.movementX;
+                    reticle.y += pointer.movementY;
+                } else {
+                    if (pointer.id <= 1) {
+                        reticle.x += pointer.x - (gameWidth / 2);
+                        reticle.y += pointer.y - (gameHeight / 2);
+                    }
+                }
+            }, this);
+        }
+
+        function update(data) {
+            if (player === undefined) { return; }
+            player.x = data.players[clientId].x;
+            player.y = data.players[clientId].y;
+
+            player.rotation = Phaser.Math.Angle.Between(player.x, player.y, reticle.x, reticle.y);
+            reticle.x = player.x + 350 * Math.cos(player.rotation);
+            reticle.y = player.y + 350 * Math.sin(player.rotation);
+            reticle.x += data.players[clientId].xSpeed;
+		    reticle.y += data.players[clientId].ySpeed;
+
+            for (let playerId in data.players) {
+                if (playerId === clientId) {continue;}
+                const otherPlayer = data.players[playerId];
+
+                let enemy = null;
+                for (const listEnemy of enemies.children.entries) {
+                    if (playerId === listEnemy.playerId) {
+                        enemy = listEnemy;
+                        break;
+                    }
+                }
+
+                if (!enemy) {
+                    enemy = enemies.get(otherPlayer.x, otherPlayer.y).setActive(true).setVisible(true);
+                    enemy.playerId = playerId;
+                } else {
+                    if (otherPlayer.health <= 0) {
+                        enemy.setActive(false).setVisible(false);
+                    }
+                    enemy.x = otherPlayer.x;
+                    enemy.y = otherPlayer.y;
+                    enemy.rotation = otherPlayer.rotation;
+                }
+            }
+
+            for (let dataBulletId in data.bullets) {
+                let dataBullet = data.bullets[dataBulletId];
+                let bullet = null;
+                for (const listBullet of bullets.children.entries) {
+                    if (dataBullet.id === listBullet.id) {
+                        bullet = listBullet;
+                        break;
+                    }
+                }
+
+                if (!bullet) {
+                    bullet = bullets.get().setActive(true).setVisible(true);
+                    bullet.id = dataBullet.id;
+                } 
+                bullet.x = dataBullet.x;
+                bullet.y = dataBullet.y;
+                bullet.rotation = dataBullet.rotation;
+            }
+
+            for (const listBullet of bullets.children.entries) {
+                if (!(listBullet.id in data.bullets)) {
+                    listBullet.setActive(false).setVisible(false);
+                }
+            }
+
+            ws.send(JSON.stringify({
+                clientId: clientId,
+                rotation: player.rotation,
+                fire: player.fire
+            }));
+            player.fire = false;
+        }
+    </script>
+
+</body>
+
+</html>

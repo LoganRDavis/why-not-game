@@ -1,0 +1,27 @@
+{
+    "extends": "strongloop",
+    "parserOptions": {
+        "ecmaVersion": 2017,
+        "sourceType": "module"
+    },
+    "env": {
+        "browser": true,
+        "node": true,
+        "es6": true
+    },
+    "rules": {
+        "indent": [
+            "error",
+            "tab"
+        ],
+        "max-len": [
+            1,
+            110,
+            4
+        ],
+        "strict": [
+            2,
+            "global"
+        ]
+    }
+}
