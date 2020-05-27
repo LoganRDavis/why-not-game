@@ -14,7 +14,15 @@ class Game {
 	updateState() {
 		for (let playerId in this.players) {
 			let player = this.players[playerId];
-			if (!player || player.health <= 0) { continue; }
+			if (!player || player.health <= 0 ||
+				Date.now() - player.lastShot > 60000) {
+				delete this.players[playerId];
+				continue;
+			}
+			if (player.ai) {
+				this.rotateAi(player);
+				player.fire = true;
+			}
 			this.moveObject(player);
 			this.constrainToBounds(player);
 			this.fireBullet(player);
@@ -30,6 +38,10 @@ class Game {
 			if (Date.now() - bullet.born > 15000) {
 				delete this.bullets[bulletId];
 			}
+		}
+
+		if (Object.keys(this.players).length < 10) {
+			this.addAi();
 		}
 	}
 
@@ -48,6 +60,7 @@ class Game {
 		let newPlayer = {
 			id: clientId,
 			health: 3,
+			score: 0,
 			x: 500,
 			y: 500,
 			width: 132,
@@ -57,10 +70,11 @@ class Game {
 			acc: 1,
 			xSpeed: 0,
 			ySpeed: 0,
-			lastShot: 0,
+			lastShot: Date.now(),
 		};
 
 		this.players[clientId] = newPlayer;
+		return newPlayer;
 	}
 
 	processPlayerAction(data) {
@@ -105,7 +119,7 @@ class Game {
 	}
 
 	fireBullet(player) {
-		if (!player.fire || Date.now() - player.lastShot < 500) { return; }
+		if (!player.fire || Date.now() - player.lastShot < 1000) { return; }
 		let bullet = {
 			x: player.x,
 			y: player.y,
@@ -151,8 +165,48 @@ class Game {
 
 			if (hit) {
 				player.health -= 1;
+				try {
+					this.players[bullet.playerId].score++;
+				} catch (err) {}
 				return true;
 			}
+		}
+	}
+
+	addAi() {
+		const id = uuidv4();
+		const aiPlayer = this.addPlayer(id);
+		aiPlayer.ai = true;
+		aiPlayer.x = Math.floor(Math.random() * 10000) + 1;
+		aiPlayer.y = Math.floor(Math.random() * 10000) + 1;
+	}
+
+	rotateAi(aiPlayer) {
+		let closestPlayer = null;
+		for (let playerId in this.players) {
+			if (playerId === aiPlayer.id) {
+				continue;
+			}
+
+			let player = this.players[playerId];
+			if (closestPlayer === null) {
+				closestPlayer = player;
+				continue;
+			}
+
+			let closestXDiff = Math.abs(aiPlayer.x - closestPlayer.x);
+			let closestYDiff = Math.abs(aiPlayer.y - closestPlayer.y);
+			let playerXDiff = Math.abs(aiPlayer.x - player.x);
+			let playerYDiff = Math.abs(aiPlayer.y - player.y);
+
+			if ((playerXDiff + playerYDiff) < (closestXDiff + closestYDiff)) {
+				closestPlayer = player;
+			}
+		}
+
+		if (closestPlayer) {
+			aiPlayer.rotation = Math.atan2(
+				closestPlayer.y - aiPlayer.y, closestPlayer.x - aiPlayer.x);
 		}
 	}
 }
@@ -170,7 +224,7 @@ wss.on('connection', function connection(ws) {
 	});
 });
 
-setInterval(function() {
+setInterval(function () {
 	game.updateState();
 	wss.clients.forEach(function each(client) {
 		if (client.readyState === WebSocket.OPEN) {

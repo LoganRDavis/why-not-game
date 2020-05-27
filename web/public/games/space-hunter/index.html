@@ -7,9 +7,14 @@
 </head>
 
 <body>
-
+    <div style="text-align: center;">
+        <h1>Space Hunter</h1>
+        <h2 id="playerHealth">Health: 3</h2>
+        <h2 id="playerScore">Score: 0</h2>
+    </div>
     <script>
-        const socketUrl = `wss://${window.location.host}/games/space-hunter`;;
+        const webSocketProtocol = (location.protocol === 'https:') ? 'wss' : 'ws';
+        const socketUrl = `${webSocketProtocol}://${window.location.host}/games/space-hunter`;;
         const filesUrl = `${window.location.protocol}//${window.location.host}/public/games/space-hunter`;
         const uuidv4 = window.uuid.v4;
         var ws = new WebSocket(socketUrl);
@@ -25,8 +30,8 @@
             update(data);
         };
         
-        const gameWidth = 1280;
-        const gameHeight = 720;
+        const gameWidth = window.innerWidth;
+        const gameHeight = window.innerHeight / 1.3;
 
         var game = new Phaser.Game({
             type: Phaser.AUTO,
@@ -213,8 +218,12 @@
 
         function update(data) {
             if (player === undefined) { return; }
+            if (!data.players[clientId]) { return endGame(); }
             player.x = data.players[clientId].x;
             player.y = data.players[clientId].y;
+
+            document.getElementById('playerHealth').innerHTML = `Health: ${data.players[clientId].health}`;
+            document.getElementById('playerScore').innerHTML = `Score: ${data.players[clientId].score}`;
 
             player.rotation = Phaser.Math.Angle.Between(player.x, player.y, reticle.x, reticle.y);
             reticle.x = player.x + 350 * Math.cos(player.rotation);
@@ -278,6 +287,10 @@
                 fire: player.fire
             }));
             player.fire = false;
+        }
+    
+        function endGame() {
+            //alert('GAME OVER');
         }
     </script>
 
