@@ -59,10 +59,17 @@
         const uuidv4 = window.uuid.v4;
         var ws = new WebSocket(socketUrl);
         const clientId = uuidv4();
+        let clientAdded = false;
         ws.onopen = function () {
             ws.send(JSON.stringify({
                 clientId: clientId
             }));
+
+            ws.onmessage = function (message) {
+                trackTimeToUpdate();
+                let data = JSON.parse(message.data);
+                update(data);
+            };
         };
 
         let updateStats = {
@@ -87,12 +94,6 @@
                 updateStats.max = timeDiff;
             }
         }
-
-        ws.onmessage = function (message) {
-            trackTimeToUpdate();
-            let data = JSON.parse(message.data);
-            update(data);
-        };
 
         const gameWidth = window.innerWidth;
         const gameHeight = window.innerHeight / 1.3;
@@ -282,7 +283,8 @@
         }
 
         function update(data) {
-            if (player === undefined) { return; }
+            if (!clientAdded && data.players[clientId]) { clientAdded = true; }
+            if (!clientAdded || typeof(player) === 'null' || typeof(player) === 'undefined') { return; }
             if (!data.players[clientId]) { return endGame(player.score); }
             player.x = data.players[clientId].x;
             player.y = data.players[clientId].y;
