@@ -61,8 +61,8 @@ class Game {
 			id: clientId,
 			health: 3,
 			score: 0,
-			x: 500,
-			y: 500,
+			x: Math.floor(Math.random() * 10000) + 1,
+			y: Math.floor(Math.random() * 10000) + 1,
 			width: 132,
 			height: 120,
 			rotation: 0,
@@ -177,8 +177,6 @@ class Game {
 		const id = uuidv4();
 		const aiPlayer = this.addPlayer(id);
 		aiPlayer.ai = true;
-		aiPlayer.x = Math.floor(Math.random() * 10000) + 1;
-		aiPlayer.y = Math.floor(Math.random() * 10000) + 1;
 	}
 
 	rotateAi(aiPlayer) {
