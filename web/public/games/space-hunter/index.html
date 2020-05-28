@@ -357,6 +357,7 @@
         }
 
         function endGame(score) {
+            ws.close();
             game.input.mouse.releasePointerLock();
             document.getElementById('finalScore').innerHTML = `Your Score: ${score}`;
             document.getElementById('deathScreen').style.display = "block";
