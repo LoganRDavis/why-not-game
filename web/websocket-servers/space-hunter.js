@@ -35,7 +35,7 @@ class Game {
 			if (this.checkCollide(bullet)) {
 				delete this.bullets[bulletId];
 			}
-			if (Date.now() - bullet.born > 15000) {
+			if (Date.now() - bullet.born > 5000) {
 				delete this.bullets[bulletId];
 			}
 		}
@@ -167,7 +167,7 @@ class Game {
 				player.health -= 1;
 				try {
 					this.players[bullet.playerId].score++;
-				} catch (err) {}
+				} catch (err) { }
 				return true;
 			}
 		}
@@ -224,11 +224,12 @@ wss.on('connection', function connection(ws) {
 	});
 });
 
-setInterval(function () {
+setInterval(function() {
 	game.updateState();
+	const state = game.getState();
 	wss.clients.forEach(function each(client) {
 		if (client.readyState === WebSocket.OPEN) {
-			client.send(game.getState());
+			client.send(state);
 		}
 	});
 }, 20);
